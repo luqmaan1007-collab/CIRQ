@@ -1,0 +1,56 @@
+module CPU {
+
+    // Registers
+    reg R0:8
+    reg R1:8
+    reg R2:8
+    reg PC:16
+
+    // Memory
+    mem ram:256:8
+
+    // Current instruction
+    wire instr:8
+
+    // Clocked execution
+    always clk.posedge {
+
+        // Fetch
+        instr = ram[PC]
+
+        // Decode + Execute
+
+        // ADD R0 = R0 + R1
+        when instr == 0 {
+            R0 = R0 + R1
+        }
+
+        // SUB R0 = R0 - R1
+        when instr == 1 {
+            R0 = R0 - R1
+        }
+
+        // LOAD R0 from RAM
+        when instr == 2 {
+            R0 = ram[R1]
+        }
+
+        // STORE R0 to RAM
+        when instr == 3 {
+            ram[R1] = R0
+        }
+
+        // MOVE R1 → R0
+        when instr == 4 {
+            R0 = R1
+        }
+
+        // CLEAR R0
+        when instr == 5 {
+            R0 = 0
+        }
+
+        // Increment program counter
+        PC = PC + 1
+    }
+}
