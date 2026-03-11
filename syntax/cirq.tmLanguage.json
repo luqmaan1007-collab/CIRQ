@@ -1,0 +1,10 @@
+{
+  "scopeName": "source.cirq",
+  "name": "CIRQ",
+  "patterns": [
+    {"match":"\\b(module|reg|wire|mem|func|always|when|otherwise)\\b","name":"keyword.cirq"},
+    {"match":"\\b([0-9]+)\\b","name":"constant.numeric.cirq"},
+    {"match":"//.*$","name":"comment.line.double-slash.cirq"},
+    {"match":"\".*?\"","name":"string.quoted.double.cirq"}
+  ]
+}
