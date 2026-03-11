@@ -1,0 +1,205 @@
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  cpu.cirq  —  SimpleCPU in CIRQ Language                        ║
+// ║  CIRQ is fully independent. No Verilog. No VHDL.                ║
+// ╚══════════════════════════════════════════════════════════════════╝
+//
+// Compiles to:  cpu.cqbit
+// Simulate:     cqsim  cpu.cqbit --rom program.hex --cycles 100 --regs
+// Program FPGA: cqprog flash cpu.cqbit --board ice40hx8k
+
+chip SimpleCPU {
+
+    // ── Clock & Reset ─────────────────────────────────────────────
+    clock clk : 50mhz
+    reset rst : active_high
+
+    // ── Registers ─────────────────────────────────────────────────
+    reg R0        : 8  = 0x00
+    reg R1        : 8  = 0x00
+    reg PC        : 8  = 0x00
+    reg IR        : 8  = 0x00
+    reg MAR       : 8  = 0x00
+    reg FLAGS     : 4  = 0b0000
+    reg cpu_phase : 2  = 0b00
+
+    // ── Memory ────────────────────────────────────────────────────
+    ram IMEM : 256 x 8 = rom("program.hex")
+    ram DMEM : 256 x 8
+
+    // ── Opcodes ───────────────────────────────────────────────────
+    const OP_NOP   : 8 = 0x00
+    const OP_LOAD  : 8 = 0x01
+    const OP_STORE : 8 = 0x02
+    const OP_MOVE  : 8 = 0x03
+    const OP_ADD   : 8 = 0x04
+    const OP_SUB   : 8 = 0x05
+    const OP_AND   : 8 = 0x06
+    const OP_OR    : 8 = 0x07
+    const OP_XOR   : 8 = 0x08
+    const OP_NOT   : 8 = 0x09
+    const OP_SHL   : 8 = 0x0A
+    const OP_SHR   : 8 = 0x0B
+    const OP_CLEAR : 8 = 0x0C
+    const OP_INC   : 8 = 0x0D
+    const OP_DEC   : 8 = 0x0E
+    const OP_JMP   : 8 = 0x0F
+    const OP_JZ    : 8 = 0x10
+    const OP_JC    : 8 = 0x11
+    const OP_HALT  : 8 = 0xFF
+
+    // ── CPU Phases ────────────────────────────────────────────────
+    state FETCH   = 0b00
+    state DECODE  = 0b01
+    state EXECUTE = 0b10
+    state HALTED  = 0b11
+
+    // ══════════════════════════════════════════════════════════════
+    //  CLOCKED CPU CORE
+    //  Fires on every rising clock edge — real synchronous hardware
+    // ══════════════════════════════════════════════════════════════
+    on clock.rise {
+
+        // Synchronous reset
+        if rst == 1 {
+            R0        <= 0x00
+            R1        <= 0x00
+            PC        <= 0x00
+            IR        <= 0x00
+            MAR       <= 0x00
+            FLAGS     <= 0x00
+            cpu_phase <= 0b00
+        }
+
+        else {
+
+            // ── FETCH: read instruction from IMEM[PC] ─────────────
+            when cpu_phase == 0b00 {
+                IR        <= IMEM[PC]
+                cpu_phase <= 0b01
+            }
+
+            // ── DECODE: read operand byte ─────────────────────────
+            when cpu_phase == 0b01 {
+                MAR       <= IMEM[PC + 1]
+                cpu_phase <= 0b10
+            }
+
+            // ── EXECUTE: dispatch on opcode ───────────────────────
+            when cpu_phase == 0b10 {
+
+                when IR == OP_NOP {
+                    PC <= PC + 1
+                }
+
+                when IR == OP_LOAD {
+                    R0 <= DMEM[MAR]
+                    PC <= PC + 2
+                }
+
+                when IR == OP_STORE {
+                    DMEM[MAR] <= R0
+                    PC        <= PC + 2
+                }
+
+                when IR == OP_MOVE {
+                    R0 <= R1
+                    PC <= PC + 1
+                }
+
+                when IR == OP_ADD {
+                    R0       <= R0 + R1
+                    FLAGS[0] <= R0 + R1 == 0x00
+                    PC       <= PC + 1
+                }
+
+                when IR == OP_SUB {
+                    R0       <= R0 - R1
+                    FLAGS[0] <= R0 - R1 == 0x00
+                    PC       <= PC + 1
+                }
+
+                when IR == OP_AND {
+                    R0 <= R0 & R1
+                    PC <= PC + 1
+                }
+
+                when IR == OP_OR {
+                    R0 <= R0 | R1
+                    PC <= PC + 1
+                }
+
+                when IR == OP_XOR {
+                    R0 <= R0 ^ R1
+                    PC <= PC + 1
+                }
+
+                when IR == OP_NOT {
+                    R0 <= ~R0
+                    PC <= PC + 1
+                }
+
+                when IR == OP_SHL {
+                    FLAGS[1] <= R0 >> 7
+                    R0       <= R0 << 1
+                    PC       <= PC + 1
+                }
+
+                when IR == OP_SHR {
+                    FLAGS[1] <= R0 & 1
+                    R0       <= R0 >> 1
+                    PC       <= PC + 1
+                }
+
+                when IR == OP_CLEAR {
+                    R0       <= 0x00
+                    FLAGS[0] <= 1
+                    PC       <= PC + 1
+                }
+
+                when IR == OP_INC {
+                    R0 <= R0 + 1
+                    PC <= PC + 1
+                }
+
+                when IR == OP_DEC {
+                    R0 <= R0 - 1
+                    PC <= PC + 1
+                }
+
+                when IR == OP_JMP {
+                    PC <= MAR
+                }
+
+                when IR == OP_JZ {
+                    when FLAGS[0] == 1 { PC <= MAR    }
+                    else               { PC <= PC + 2 }
+                }
+
+                when IR == OP_JC {
+                    when FLAGS[1] == 1 { PC <= MAR    }
+                    else               { PC <= PC + 2 }
+                }
+
+                when IR == OP_HALT {
+                    cpu_phase <= 0b11
+                }
+
+                when cpu_phase != 0b11 {
+                    cpu_phase <= 0b00
+                }
+            }
+
+            // ── HALTED: hold until reset ──────────────────────────
+            when cpu_phase == 0b11 {
+                // hold
+            }
+        }
+    }
+
+    // ── Physical output pins ──────────────────────────────────────
+    out port debug_R0    : 8 = R0
+    out port debug_PC    : 8 = PC
+    out port debug_flags : 4 = FLAGS
+    out port halted      : 1 = cpu_phase
+
+} // end chip SimpleCPU
